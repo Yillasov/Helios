@@ -9,31 +9,32 @@ Helios is a Python-based simulation platform enabling sophisticated modeling of 
 
 ## Key Features
 
-*   **High-Fidelity RF Environment:** Simulates complex electromagnetic environments, including signal propagation, interference, noise, and clutter (<mcfile name="clutter.py" path="/Users/yessine/Helios/src/helios/environment/clutter.py"></mcfile>).
-*   **Cognitive Waveform Generation:** Design and evaluation of adaptive waveforms using a built-in cognitive engine (<mcfile name="engine.py" path="/Users/yessine/Helios/src/helios/cognitive/engine.py"></mcfile>).
-*   **Agile High-Power Microwave (HPM) Modeling:** Simulation of HPM waveform generation and basic coupling effects (<mcfile name="hpm_coupling.py" path="/Users/yessine/Helios/src/helios/environment/hpm_coupling.py"></mcfile>).
-*   **Discrete-Event Simulation Engine:** Efficiently handles complex scenarios with numerous interacting components and events (<mcsymbol name="ISimulationEngine" filename="interfaces.py" path="/Users/yessine/Helios/src/helios/core/interfaces.py" startline="171" type="class"></mcsymbol>). Includes optimized versions (<mcfile name="optimized_engine.py" path="/Users/yessine/Helios/src/helios/simulation/optimized_engine.py"></mcfile>).
-*   **Dynamic Environment Modeling:** Supports time-varying elements like temporal RCS (<mcfile name="temporal_rcs.py" path="/Users/yessine/Helios/src/helios/environment/temporal_rcs.py"></mcfile>) and clutter (<mcfile name="temporal_clutter.py" path="/Users/yessine/Helios/src/helios/environment/temporal_clutter.py"></mcfile>).
-*   **Network Control & Analysis:** Tools for simulating and analyzing networked RF systems (<mcfile name="control.py" path="/Users/yessine/Helios/src/helios/network/control.py"></mcfile>).
-*   **Hardware Interface Abstraction:** Defines interfaces for potential Hardware-in-the-Loop (HIL) integration (<mcsymbol name="IRadioHardwareInterface" filename="interfaces.py" path="/Users/yessine/Helios/src/helios/hardware/interfaces.py" startline="10" type="class"></mcsymbol>).
-*   **Data Sanitization:** Utilities for removing sensitive information from logs and results (<mcfile name="data_sanitizer.py" path="/Users/yessine/Helios/src/helios/security/data_sanitizer.py"></mcfile>).
-*   **Extensible Architecture:** Modular design based on interfaces (<mcfile name="interfaces.py" path="/Users/yessine/Helios/src/helios/core/interfaces.py"></mcfile>) allows for easy extension and customization.
-*   **Packaging & Deployment:** Ready for deployment using standard Python packaging (<mcfile name="setup.py" path="/Users/yessine/Helios/setup.py"></mcfile>), Docker (<mcfile name="Dockerfile" path="/Users/yessine/Helios/Dockerfile"></mcfile>), and a deployment script (<mcfile name="deploy.sh" path="/Users/yessine/Helios/deploy.sh"></mcfile>).
+*   **High-Fidelity RF Environment:** Simulates complex electromagnetic environments, including signal propagation, interference, noise, and clutter.
+*   **Cognitive Waveform Generation:** Enables the design and evaluation of adaptive waveforms using a built-in cognitive engine.
+*   **Agile High-Power Microwave (HPM) Modeling:** Supports simulation of HPM waveform generation and basic coupling effects.
+*   **Discrete-Event Simulation Engine:** Efficiently handles complex scenarios with numerous interacting components and events.
+*   **Dynamic Environment Modeling:** Supports time-varying elements like temporal RCS and clutter.
+*   **Network Control & Analysis:** Tools for simulating and analyzing networked RF systems.
+*   **Hardware Interface Abstraction:** Defines interfaces for potential Hardware-in-the-Loop (HIL) integration.
+*   **Data Sanitization:** Utilities for removing sensitive information from logs and results.
+*   **Extensible Architecture:** Modular design based on interfaces, allowing for easy extension and customization.
+*   **Packaging & Deployment:** Ready for deployment using standard Python packaging, Docker, and a deployment script.
+
 
 ## Architecture Overview
 
 Helios is built around several core components:
 
-*   **Core:** Defines fundamental data structures (<mcfile name="data_structures.py" path="/Users/yessine/Helios/src/helios/core/data_structures.py"></mcfile>) and interfaces (<mcfile name="interfaces.py" path="/Users/yessine/Helios/src/helios/core/interfaces.py"></mcfile>).
-*   **Simulation:** Contains the simulation engine implementations (<mcsymbol name="ISimulationEngine" filename="interfaces.py" path="/Users/yessine/Helios/src/helios/core/interfaces.py" startline="171" type="class"></mcsymbol>, <mcfile name="optimized_engine.py" path="/Users/yessine/Helios/src/helios/simulation/optimized_engine.py"></mcfile>).
-*   **Environment:** Models the physical world, including propagation, clutter, RCS (<mcfile name="rcs_multistatic.py" path="/Users/yessine/Helios/src/helios/environment/rcs_multistatic.py"></mcfile>), and HPM effects.
-*   **Waveforms:** Manages waveform generation, including cognitive adaptation (<mcfile name="cognitive_generator.py" path="/Users/yessine/Helios/src/helios/waveforms/cognitive_generator.py"></mcfile>).
-*   **Hardware:** Provides interfaces and potential implementations for interacting with hardware (<mcfile name="interfaces.py" path="/Users/yessine/Helios/src/helios/hardware/interfaces.py"></mcfile>).
-*   **Network:** Simulates network links and control mechanisms (<mcfile name="interfaces.py" path="/Users/yessine/Helios/src/helios/network/interfaces.py"></mcfile>).
-*   **Cognitive:** Implements the cognitive engine for intelligent decision-making (<mcfile name="engine.py" path="/Users/yessine/Helios/src/helios/cognitive/engine.py"></mcfile>).
-*   **Security:** Includes utilities for authentication, access control, and data sanitization (<mcfile name="auth.py" path="/Users/yessine/Helios/src/helios/security/auth.py"></mcfile>, <mcfile name="data_sanitizer.py" path="/Users/yessine/Helios/src/helios/security/data_sanitizer.py"></mcfile>).
-*   **Analysis:** Contains scripts and tools for processing simulation results (<mcfile name="simulation_analyzer.py" path="/Users/yessine/Helios/src/analysis/simulation_analyzer.py"></mcfile>).
-*   **CLI:** Provides command-line interfaces for running simulations (<mcfile name="simulator.py" path="/Users/yessine/Helios/src/helios/cli/simulator.py"></mcfile>) and analysis (<mcfile name="analyzer.py" path="/Users/yessine/Helios/src/helios/cli/analyzer.py"></mcfile>).
+*   **Core:** Defines fundamental data structures and interfaces 
+*   **Simulation:** Contains the simulation engine implementations.
+*   **Environment:** Models the physical world, including propagation, clutter, RCS, and HPM effects.
+*   **Waveforms:** Manages waveform generation, including cognitive adaptation.
+*   **Hardware:** Provides interfaces and potential implementations for interacting with hardware.
+*   **Network:** Simulates network links and control mechanisms.
+*   **Cognitive:** Implements the cognitive engine for intelligent decision-making.
+*   **Security:** Includes utilities for authentication, access control, and data sanitization.
+*   **Analysis:** Contains scripts and tools for processing simulation results.
+*   **CLI:** Provides command-line interfaces for running simulations.
 
 ## Installation
 
@@ -117,36 +118,6 @@ results = engine.run()
 print("Simulation finished.")
 ```
 
-## Directory Structure
-
-/Users/yessine/Helios/
-├── config/             # Configuration files (YAML, JSON)
-├── data/               # Sample data (scenarios, models)
-├── docs/               # Documentation files
-├── src/
-│   ├── analysis/       # Post-simulation analysis scripts
-│   └── helios/         # Main source code for the Helios library
-│       ├── cli/        # Command-line interface entry points
-│       ├── cognitive/  # Cognitive engine components
-│       ├── core/       # Core interfaces and data structures
-│       ├── environment/# Environment modeling (propagation, clutter, RCS)
-│       ├── hardware/   # Hardware interface abstractions
-│       ├── network/    # Network simulation components
-│       ├── security/   # Security features (auth, sanitization)
-│       ├── simulation/ # Simulation engine implementations
-│       ├── utils/      # Utility functions (logging, config loading)
-│       └── waveforms/  # Waveform generation and management
-├── tests/              # Unit and integration tests
-├── Dockerfile          # Docker build definition
-├── INTENT.md           # Statement of Intent / Ethical Use Guide
-├── LICENSE             # Project license file
-├── MANIFEST.in         # Packaging manifest for non-code files
-├── README.md           # This file
-├── deploy.sh           # Deployment script
-├── docker-compose.yml  # Docker Compose configuration
-├── pyproject.toml      # Project metadata and dependencies (for Poetry)
-└── setup.py            # Python packaging script
-```
 
 ## Deployment
 
@@ -201,4 +172,3 @@ This project is licensed under the terms specified in the [LICENSE](/Users/yessi
 ## Support
 
 For questions or issues, please open an issue on the project's repository.
-```
