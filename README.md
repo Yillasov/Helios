@@ -59,7 +59,7 @@ poetry install
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/Yillasov/Helios.git
 cd Helios
 
 # Install dependencies and the project (editable mode)
