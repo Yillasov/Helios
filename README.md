@@ -119,33 +119,6 @@ print("Simulation finished.")
 ```
 
 
-## Deployment
-
-Helios supports containerized deployment using Docker.
-
-**Build Docker Image:**
-
-```bash
-docker build -t helios-rf:latest .
-```
-
-**Run Simulation in Docker:**
-
-```bash
-docker run -v $(pwd)/config:/app/config -v $(pwd)/data:/data helios-rf:latest \
-  helios-sim -c /app/config/default_sim_config.yaml -o /data/results
-```
-
-**Using Docker Compose:**
-
-The `docker-compose.yml` file provides configurations for running simulation and analysis services.
-
-```bash
-docker-compose up
-```
-
-A deployment script (`deploy.sh`) is also available to create a distributable package. 
-
 ## Testing
 
 Tests are located in the `/Users/yessine/Helios/tests` directory and can be run using `pytest`.
@@ -163,11 +136,11 @@ Contributions are welcome! Open an issue on the project repository to discuss ch
 
 ## Ethical Use
 
-The Helios RF Systems Suite is intended for lawful and ethical use in research, development, education, and system analysis. Users are expected to adhere to the principles outlined in the [Statement of Intent (INTENT.md)](/Users/yessine/Helios/INTENT.md) and comply with all applicable laws and regulations regarding RF spectrum usage and system development. Misuse of this software for harmful or illegal activities is strictly prohibited.
+The Helios RF Systems Suite is intended for lawful and ethical use in research, development, education, and system analysis. Users are expected to comply with all applicable laws and regulations regarding RF spectrum usage and system development. Misuse of this software for harmful or illegal activities is strictly prohibited.
 
 ## License
 
-This project is licensed under the terms specified in the [LICENSE](/Users/yessine/Helios/LICENSE) file.
+This project is licensed under a proprietary license. 
 
 ## Support
 
