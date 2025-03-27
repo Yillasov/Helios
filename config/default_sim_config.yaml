@@ -1,0 +1,87 @@
+# Default Simulation Configuration for Helios
+
+logging:
+  level: INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # file: helios_run.log # Optional: Path to log file
+
+simulation:
+  scenario_name: "Default Scenario"
+  start_time: 0.0       # Simulation start time (seconds)
+  duration: 60.0        # Total simulation duration (seconds)
+  # Note: Discrete event simulation doesn't strictly need a fixed 'time_step'
+  # Updates happen based on scheduled events.
+  # We might add parameters for specific update frequencies if needed.
+  platform_update_frequency: 1.0 # Hz (How often to schedule platform position updates)
+
+environment:
+  temperature: 290.0     # Ambient temperature in Kelvin
+  noise_floor_density: -174.0 # dBm/Hz
+
+# --- Scenario Definition ---
+# This section could be expanded significantly or loaded from a separate scenario file
+platforms:
+  - id: platform_A
+    name: "Observer Aircraft"
+    type: "aircraft"
+    position: {x: 0, y: 0, z: 10000}   # meters
+    velocity: {x: 250, y: 0, z: 0}     # m/s
+    orientation: {roll: 0, pitch: 0, yaw: 0} # radians
+    systems:
+      - id: comms_rx_A
+        name: "Receiver A"
+        system_type: "communication_receiver"
+        parameters:
+          center_frequency: 1.2e9 # Hz
+          bandwidth: 10e6 # Hz
+          sensitivity: -100 # dBm
+  - id: platform_B
+    name: "Ground Transmitter"
+    type: "ground_station"
+    position: {x: 50000, y: 0, z: 100} # meters
+    velocity: {x: 0, y: 0, z: 0}      # m/s
+    orientation: {roll: 0, pitch: 0, yaw: 0} # radians
+    systems:
+      - id: comms_tx_B
+        name: "Transmitter B"
+        system_type: "communication_transmitter"
+        parameters:
+          waveform_id: "wf_basic_tone" # Reference to a waveform definition
+          power: 30 # dBm
+
+waveforms:
+  - id: wf_basic_tone
+    center_frequency: 1.2e9 # Hz
+    bandwidth: 1e3 # Hz (Narrow tone)
+    amplitude: 1.0
+    modulation_type: NONE
+
+  - id: wf_cognitive_adaptive # Example Cognitive Waveform Definition
+    # Basic Waveform Params (Initial state)
+    center_frequency: 2.4e9 # Hz
+    bandwidth: 5e6 # Hz
+    amplitude: 0.8
+    modulation_type: QAM
+    modulation_params:
+      order: 16 # 16-QAM
+
+    # Cognitive Params
+    is_cognitive: true # Flag to indicate this is cognitive
+    adaptation_goals:
+      - MINIMIZE_INTERFERENCE
+      - MAXIMIZE_SNR
+    adaptation_constraints:
+      min_frequency: 2.3e9
+      max_frequency: 2.5e9
+      max_bandwidth: 10e6
+      max_amplitude: 1.0
+      target_snr: 15.0 # dB
+      max_interference_threshold: -85.0 # dBm
+    feedback_metrics: ["snr", "interference_level", "channel_occupancy"]
+    adaptation_strategy: "reactive_frequency_hop" # Identifier for specific logic
+
+# Initial signals could also be defined here
+initial_signals: []
+  # - source_id: "comms_tx_B" # ID of the system emitting the signal
+  #   waveform_id: "wf_basic_tone"
+  #   emission_time: 0.0
+  #   power: 30 # Redundant? System might control this. Define if overrides system.

@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "helios"
+version = "0.1.0"
+description = "Advanced RF systems simulation and analysis suite"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "helios", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+numpy = "^1.24.0"
+scipy = "^1.10.0"
+pandas = "^2.0.0"
+matplotlib = "^3.7.0"
+pyyaml = "^6.0"
+h5py = "^3.8.0"
+numba = "^0.57.0"
+torch = "^2.0.0"
+tensorflow = "^2.12.0"
+scikit-learn = "^1.2.0"
+plotly = "^5.14.0"
+dash = "^2.9.0"
+pyqt5 = "^5.15.0"
+pyside6 = "^6.5.0"
+pytest = "^7.3.0"
+black = "^23.3.0"
+isort = "^5.12.0"
+mypy = "^1.2.0"
+flake8 = "^6.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.0"
+pytest-cov = "^4.1.0"
+black = "^23.3.0"
+isort = "^5.12.0"
+mypy = "^1.2.0"
+flake8 = "^6.0.0"
+sphinx = "^6.1.0"
+sphinx-rtd-theme = "^1.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

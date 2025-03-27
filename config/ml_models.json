@@ -1,0 +1,46 @@
+{
+  "models": {
+    "interference_avoidance_api": { 
+      "model_type": "api",
+      "endpoint_url": "https://api.example.com/ml/interference",
+      "api_key": "YOUR_API_KEY",
+      "input_features": [
+        "center_frequency",
+        "bandwidth",
+        "spectrum_bands"
+      ],
+      "output_features": [
+        "center_frequency"
+      ]
+    },
+    "snr_optimization_api": {
+      "model_type": "api",
+      "endpoint_url": "https://api.example.com/ml/snr",
+      "api_key": "YOUR_API_KEY",
+      "input_features": [
+        "center_frequency",
+        "bandwidth",
+        "amplitude",
+        "modulation_type",
+        "spectrum_bands"
+      ],
+      "output_features": [
+        "amplitude",
+        "modulation_type",
+        "modulation_params"
+      ]
+    },
+    "rl_jammer_defense": { 
+      "model_type": "rl",
+      "rl_params": {
+        "learning_rate": 0.1,
+        "discount_factor": 0.9,
+        "exploration_rate": 0.2,
+        "state_features": ["jamming_status"],
+        "action_space": ["freq_up", "freq_down", "power_up", "no_change"]
+      },
+      "input_features": ["jamming_status"], 
+      "output_features": ["center_frequency", "amplitude"] 
+    }
+  }
+}

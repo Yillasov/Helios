@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+  helios-simulator:
+    build: .
+    image: helios-rf:latest
+    volumes:
+      - ./config:/app/config
+      - ./data:/data
+    command: -c /app/config/default_sim_config.yaml -o /data/results
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+
+  helios-analyzer:
+    build: .
+    image: helios-rf:latest
+    volumes:
+      - ./data:/data
+    entrypoint: helios-analyze
+    command: -r /data/results -o /data/analysis
+    depends_on:
+      - helios-simulator

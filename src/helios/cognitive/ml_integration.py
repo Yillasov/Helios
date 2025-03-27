@@ -1,0 +1,256 @@
+"""Machine Learning integration for cognitive algorithms."""
+
+import numpy as np
+from typing import Dict, List, Any, Optional, Tuple
+import logging
+import json
+import os
+import requests
+# Import 'field' from dataclasses
+from dataclasses import dataclass, field
+import random # Import random for exploration
+
+from helios.cognitive.data_structures import EnvironmentState, SpectrumBand
+from helios.core.data_structures import CognitiveWaveform, AdaptationGoal
+from helios.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+@dataclass
+class MLModelConfig:
+    """Configuration for ML model integration."""
+    model_type: str  # "local", "api", "rl", "custom" # Added "rl"
+    endpoint_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model_path: Optional[str] = None
+    # Use field for default factory, now that it's imported
+    input_features: List[str] = field(default_factory=list)
+    output_features: List[str] = field(default_factory=list)
+    # RL specific params (optional)
+    rl_params: Optional[Dict[str, Any]] = None
+
+
+class MLIntegration:
+    """Provides integration with machine learning frameworks via APIs and RL."""
+
+    def __init__(self, config_path: Optional[str] = None):
+        """Initialize ML integration with optional config file."""
+        self.models: Dict[str, Any] = {}
+        self.model_configs: Dict[str, MLModelConfig] = {}
+
+        # Load configuration if provided
+        if config_path and os.path.exists(config_path):
+            self._load_config(config_path)
+
+        # Initialize API session for reuse
+        self.session = requests.Session()
+
+        # Feature history for training/evaluation
+        self.feature_history: List[Dict[str, Any]] = []
+        self.max_history_size = 10000
+
+        # --- RL Specific State ---
+        # Simple Q-table like structure: state -> action -> value
+        # State representation needs careful design in a real system
+        self.q_values: Dict[str, Dict[str, float]] = {}
+        self.rl_learning_rate = 0.1
+        self.rl_discount_factor = 0.9
+        self.rl_exploration_rate = 0.2 # Epsilon for epsilon-greedy
+
+    def _load_config(self, config_path: str) -> None:
+        """Load ML model configurations from file."""
+        try:
+            with open(config_path, 'r') as f:
+                config_data = json.load(f)
+            
+            for model_name, model_config in config_data.get('models', {}).items():
+                self.model_configs[model_name] = MLModelConfig(**model_config)
+                logger.info(f"Loaded configuration for ML model: {model_name}")
+        except Exception as e:
+            logger.error(f"Error loading ML configuration: {e}")
+
+    def predict_adaptation(self,
+                          model_name: str,
+                          env_state: EnvironmentState,
+                          waveform: CognitiveWaveform) -> Dict[str, Any]:
+        """
+        Get adaptation predictions from the specified ML model.
+        """
+        if model_name not in self.model_configs:
+            logger.warning(f"Unknown ML model: {model_name}")
+            return {}
+
+        config = self.model_configs[model_name]
+
+        # Prepare input features (might be used differently by RL)
+        features = self._extract_features(env_state, waveform)
+
+        # Get prediction based on model type
+        if config.model_type == "api":
+            return self._predict_api(config, features)
+        elif config.model_type == "local":
+            return self._predict_local(config, features)
+        elif config.model_type == "rl": # Handle RL prediction
+            return self._predict_rl(config, features, env_state, waveform)
+        else:
+            logger.warning(f"Unsupported model type: {config.model_type}")
+            return {}
+
+    def _extract_features(self,
+                         env_state: EnvironmentState,
+                         waveform: CognitiveWaveform) -> Dict[str, Any]:
+        """Extract relevant features for ML model input."""
+        features = {
+            "timestamp": env_state.timestamp,
+            "center_frequency": waveform.center_frequency,
+            "bandwidth": waveform.bandwidth,
+            "amplitude": waveform.amplitude,
+            "modulation_type": str(waveform.modulation_type),
+            "adaptation_goals": [str(goal) for goal in waveform.adaptation_goals],
+        }
+        
+        # Add spectrum occupancy features
+        if env_state.spectrum_occupancy:
+            occupied_bands = []
+            for band_id, occupancy in env_state.spectrum_occupancy.items():
+                occupied_bands.append({
+                    "start_freq": occupancy.band.start_freq,
+                    "end_freq": occupancy.band.end_freq,
+                    "power_level": occupancy.power_level,
+                    "is_occupied": occupancy.is_occupied,
+                    "snr": occupancy.snr
+                })
+            features["spectrum_bands"] = occupied_bands
+        
+        return features
+
+    def _predict_api(self, config: MLModelConfig, features: Dict[str, Any]) -> Dict[str, Any]:
+        """Get prediction from remote API endpoint."""
+        if not config.endpoint_url:
+            logger.error("No endpoint URL configured for API model")
+            return {}
+        
+        headers = {}
+        if config.api_key:
+            headers["Authorization"] = f"Bearer {config.api_key}"
+        
+        try:
+            response = self.session.post(
+                config.endpoint_url,
+                json={"features": features},
+                headers=headers,
+                timeout=5.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("adaptations", {})
+            else:
+                logger.error(f"API request failed: {response.status_code} - {response.text}")
+                return {}
+        except Exception as e:
+            logger.error(f"Error calling ML API: {e}")
+            return {}
+
+    def _predict_local(self, config: MLModelConfig, features: Dict[str, Any]) -> Dict[str, Any]:
+        """Get prediction from locally loaded model."""
+        # This is a placeholder for local model integration
+        # In a real implementation, this would use frameworks like scikit-learn, TensorFlow, etc.
+        logger.info("Local ML model prediction not yet implemented")
+        return {}
+
+    def _predict_rl(self,
+                    config: MLModelConfig,
+                    features: Dict[str, Any],
+                    env_state: EnvironmentState,
+                    waveform: CognitiveWaveform) -> Dict[str, Any]:
+        """Placeholder for Reinforcement Learning based prediction."""
+        logger.info(f"Predicting adaptation using RL model: {config}")
+
+        # --- State Representation (Highly Simplified) ---
+        # In a real system, state needs to discretize or embed features effectively.
+        # Example: Combine current frequency band status and goal.
+        current_freq_band = env_state.get_band_occupancy(waveform.center_frequency)
+        jamming_status = "jammed" if current_freq_band and current_freq_band.is_occupied else "clear"
+        # Simplistic state: just jamming status (needs more context)
+        state_key = f"jamming_{jamming_status}"
+
+        # --- Action Space (Highly Simplified) ---
+        # Define possible actions (parameter changes).
+        # Example: Change frequency up/down, change power up/down.
+        possible_actions = {
+            "freq_up": {"center_frequency": waveform.center_frequency + waveform.bandwidth},
+            "freq_down": {"center_frequency": waveform.center_frequency - waveform.bandwidth},
+            "power_up": {"amplitude": min(waveform.amplitude * 1.2, waveform.adaptation_constraints.get('max_amplitude', 1.0))},
+            "no_change": {}
+        }
+        action_keys = list(possible_actions.keys())
+
+        # Initialize Q-values for state if not seen
+        if state_key not in self.q_values:
+            self.q_values[state_key] = {action: 0.0 for action in action_keys}
+
+        # --- Epsilon-Greedy Action Selection ---
+        if random.random() < self.rl_exploration_rate:
+            # Explore: Choose a random action
+            action_key = random.choice(action_keys)
+            logger.debug(f"RL Explore: Chose random action '{action_key}'")
+        else:
+            # Exploit: Choose the best known action for this state
+            q_s = self.q_values[state_key]
+            action_key = max(q_s.keys(), key=lambda k: q_s[k])
+            logger.debug(f"RL Exploit: Chose best action '{action_key}' with value {q_s[action_key]:.2f}")
+
+        chosen_action_params = possible_actions[action_key]
+
+        # Store chosen action for learning update
+        # We need a way to link this prediction to the subsequent reward
+        self._last_rl_prediction = {
+            "state": state_key,
+            "action": action_key
+        }
+
+        # Return the parameter changes for the chosen action
+        return chosen_action_params
+
+
+    def record_adaptation_result(self,
+                               features: Dict[str, Any],
+                               adaptations: Dict[str, Any],
+                               performance_metrics: Dict[str, float]) -> None:
+        """
+        Record adaptation results for future training (including RL updates).
+        """
+        record = {
+            "features": features,
+            "adaptations": adaptations,
+            "performance": performance_metrics,
+            "timestamp": features.get("timestamp", 0.0)
+        }
+
+        # --- Update RL Q-values ---
+        if hasattr(self, '_last_rl_prediction') and self._last_rl_prediction:
+            state = self._last_rl_prediction["state"]
+            action = self._last_rl_prediction["action"]
+
+            # Define reward based on performance (Highly Simplified)
+            # Example: Positive reward for high SNR, negative for low SNR/high interference
+            reward = performance_metrics.get('snr', 0.0) - performance_metrics.get('interference_db', 0.0) / 10.0 # Example reward
+
+            # Q-learning update rule (simplified, no next state Q value needed here)
+            old_value = self.q_values.get(state, {}).get(action, 0.0)
+            new_value = old_value + self.rl_learning_rate * (reward - old_value) # Simplified update
+
+            if state not in self.q_values:
+                 self.q_values[state] = {}
+            self.q_values[state][action] = new_value
+
+            logger.debug(f"RL Update: State='{state}', Action='{action}', Reward={reward:.2f}, Old Q={old_value:.2f}, New Q={new_value:.2f}")
+
+            # Clear last prediction to avoid reusing it
+            self._last_rl_prediction = None
+
+        # Log/Store feature history
+        self.feature_history.append(record)
+        if len(self.feature_history) > self.max_history_size:
+            self.feature_history = self.feature_history[-self.max_history_size:]
