@@ -65,3 +65,4 @@ class ComponentSusceptibility:
                 "upset": 0.5,     # Sensitivity factor for upset effects
                 "damage": 0.8     # Sensitivity factor for damage effects
             }
+

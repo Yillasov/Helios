@@ -5,8 +5,8 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple, Union
 import numpy as np
 
-from helios.core.data_structures import Signal, Waveform, Position
-from helios.hardware.interfaces import IRadioHardwareInterface
+from helios.core.data_structures import Signal, Waveform, Position, Platform, EnvironmentParameters
+from helios.hardware.interfaces import IRadioHardwareInterface, IHILInterface
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,8 @@ class HardwareManager:
         """Initialize the hardware manager."""
         self.devices = {}  # Dictionary of connected hardware devices
         self.active_device = None  # Currently active device
+        self.hil_interfaces = {}  # Dictionary of HIL interfaces
+        self.active_hil = None  # Currently active HIL interface
     
     def register_device(self, device_id: str, device: IRadioHardwareInterface) -> bool:
         """
@@ -220,3 +222,109 @@ class HardwareManager:
         
         self.devices = {}
         self.active_device = None
+    
+    def register_hil_interface(self, hil_id: str, interface: IHILInterface) -> bool:
+        """
+        Register a HIL interface with the manager.
+        
+        Args:
+            hil_id: Unique identifier for the HIL interface
+            interface: HIL interface instance
+            
+        Returns:
+            Success status
+        """
+        if hil_id in self.hil_interfaces:
+            logger.warning(f"HIL interface {hil_id} already registered, replacing")
+            
+        self.hil_interfaces[hil_id] = interface
+        logger.info(f"Registered HIL interface: {hil_id}")
+        
+        # Set as active if first one
+        if self.active_hil is None:
+            self.active_hil = hil_id
+            
+        return True
+    
+    def set_active_hil(self, hil_id: str) -> bool:
+        """
+        Set the active HIL interface.
+        
+        Args:
+            hil_id: Identifier of HIL interface to activate
+            
+        Returns:
+            Success status
+        """
+        if hil_id not in self.hil_interfaces:
+            logger.error(f"HIL interface {hil_id} not registered")
+            return False
+            
+        self.active_hil = hil_id
+        logger.info(f"Set active HIL interface to {hil_id}")
+        return True
+    
+    def get_active_hil(self) -> Optional[IHILInterface]:
+        """
+        Get the currently active HIL interface.
+        
+        Returns:
+            Active HIL interface or None if none active
+        """
+        if self.active_hil is None:
+            return None
+            
+        return self.hil_interfaces.get(self.active_hil)
+    
+    def send_scenario_to_hil(self, 
+                           signals: List[Signal],
+                           platforms: List[Platform],
+                           environment: EnvironmentParameters) -> bool:
+        """
+        Send RF scenario to active HIL system.
+        
+        Args:
+            signals: List of signals in the scenario
+            platforms: List of platforms in the scenario
+            environment: Environmental parameters
+            
+        Returns:
+            Success status
+        """
+        hil = self.get_active_hil()
+        if hil is None:
+            logger.error("No active HIL interface")
+            return False
+            
+        return hil.send_rf_scenario(signals, platforms, environment)
+    
+    def get_hil_measurements(self) -> Dict[str, Any]:
+        """
+        Get measurements from active HIL system.
+        
+        Returns:
+            Dictionary of measurement results
+        """
+        hil = self.get_active_hil()
+        if hil is None:
+            logger.error("No active HIL interface")
+            return {}
+            
+        return hil.receive_rf_measurements()
+    
+    def calibrate_hil(self, calibration_params: Dict[str, Any]) -> bool:
+        """
+        Calibrate the active HIL system.
+        
+        Args:
+            calibration_params: Calibration parameters
+            
+        Returns:
+            Success status
+        """
+        hil = self.get_active_hil()
+        if hil is None:
+            logger.error("No active HIL interface")
+            return False
+            
+        return hil.calibrate(calibration_params)
