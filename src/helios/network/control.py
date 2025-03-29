@@ -39,7 +39,7 @@ class NetworkControl(BaseNetworkController):
         self.rf_environment_state: Dict[str, Any] = {}  # Store RF environment data
 
     # Override get_control_state to include additional information
-    def get_control_state(self) -> Dict[str, Any]:
+    def get_network_control_state(self) -> Dict[str, Any]:
         """Get the current configuration/state managed by the controller."""
         base_state = super().get_control_state()
         base_state.update({

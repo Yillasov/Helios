@@ -88,7 +88,7 @@ class BaseNetworkController(INetworkController):
         # Create a basic network state
         state = NetworkState(
             timestamp=timestamp,
-            nodes=list(self.nodes.values()),
-            links=list(self.links.values())
+            nodes=self.nodes,
+            links=self.links
         )
         return state
