@@ -3,9 +3,9 @@
 from typing import Dict, List, Optional, Any, Tuple
 
 from helios.network.data_structures import NetworkNode, NetworkLink, NetworkState
+from helios.network.base_controller import BaseNetworkController
 import numpy as np
 
-from helios.network.interfaces import INetworkController
 from helios.network.metrics import estimate_rf_impact_on_network
 from helios.cognitive.engine import CognitiveEngine
 from helios.core.data_structures import CognitiveWaveform, AdaptationGoal
@@ -14,7 +14,7 @@ from helios.network.handshake import WaveformHandshake, HandshakeState
 
 logger = get_logger(__name__)
 
-class NetworkControl(INetworkController):
+class NetworkControl(BaseNetworkController):
     """
     Network control module that adapts network behavior based on RF conditions.
     Allows nodes to request waveform changes via the CognitiveEngine.
@@ -22,9 +22,8 @@ class NetworkControl(INetworkController):
     
     def __init__(self, cognitive_engine: Optional[CognitiveEngine] = None):
         """Initialize the network control module."""
+        super().__init__()
         self.cognitive_engine = cognitive_engine or CognitiveEngine()
-        self.links: Dict[str, NetworkLink] = {}
-        self.nodes: Dict[str, NetworkNode] = {}
         self.link_quality_thresholds = {
             "poor": 0.3,      # Below this is considered poor quality
             "moderate": 0.6,  # Below this is considered moderate quality
@@ -32,20 +31,23 @@ class NetworkControl(INetworkController):
             # Above 0.8 is excellent
         }
         self.adaptation_requests: List[Dict[str, Any]] = []
-        self.active_policies: Dict[str, Dict[str, Any]] = {}
         self.handshake_manager = WaveformHandshake()  # Add handshake manager
         
         # Add routing table and resource allocation tracking
         self.routing_tables: Dict[str, Dict[str, str]] = {}  # node_id -> {dest_id: next_hop_id}
         self.resource_allocations: Dict[str, Dict[str, float]] = {}  # link_id -> {resource: value}
         self.rf_environment_state: Dict[str, Any] = {}  # Store RF environment data
+
+    # Override get_control_state to include additional information
+    def get_control_state(self) -> Dict[str, Any]:
+        """Get the current configuration/state managed by the controller."""
+        base_state = super().get_control_state()
+        base_state.update({
+            "adaptation_requests": self.adaptation_requests,
+            "link_quality_thresholds": self.link_quality_thresholds
+        })
+        return base_state
         
-    def initialize(self, nodes: Dict[str, NetworkNode], links: Dict[str, NetworkLink]):
-        """Initialize with network nodes and links."""
-        self.nodes = nodes
-        self.links = links
-        logger.info(f"Network control initialized with {len(nodes)} nodes and {len(links)} links")
-    
     def modify_link_parameters(self, link_id: str, params: Dict[str, Any]):
         """Modify parameters of a specific link."""
         if link_id not in self.links:

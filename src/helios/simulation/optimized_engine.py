@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import multiprocessing as mp
 
 from helios.core.data_structures import Scenario, Platform, Signal, Position
-from helios.core.interfaces import IDataRecorder, IPropagationModel
+from helios.core.interfaces import IDataRecorder, IPropagationModel, ISimulationEngine # Import ISimulationEngine
 from helios.utils.logger import get_logger
 from helios.environment.clutter import DiscreteClutterModel
 
@@ -30,48 +30,39 @@ class Event:
     data: Optional[Any] = field(default=None, compare=False)
     callback: Optional[EventCallback] = field(default=None, compare=False)
 
-class OptimizedSimulationEngine:
+# Inherit from ISimulationEngine
+class OptimizedSimulationEngine(ISimulationEngine):
     """
     High-performance simulation engine optimized for low-latency processing.
     Uses parallel processing for computationally intensive tasks.
+    Implements the ISimulationEngine interface.
     """
-    
+
     # Update the OptimizedSimulationEngine __init__ method to include HPM coupling
     def __init__(self,
-                scenario: Scenario,
-                propagation_model: IPropagationModel,
-                clutter_model: Optional[DiscreteClutterModel] = None,
-                hpm_coupling_model: Optional[HPMCouplingModel] = None,  # Add this parameter
-                log_level: int = logging.INFO,
-                data_recorder: Optional[IDataRecorder] = None,
-                max_workers: int = 4):
+                 scenario: Scenario, # Keep scenario for initialization
+                 propagation_model: IPropagationModel,
+                 clutter_model: Optional[DiscreteClutterModel] = None,
+                 hpm_coupling_model: Optional[HPMCouplingModel] = None,  # Add this parameter
+                 log_level: int = logging.INFO,
+                 data_recorder: Optional[IDataRecorder] = None,
+                 max_workers: int = 4):
         """
         Initialize the optimized simulation engine.
-        
-        Args:
-            scenario: The scenario to simulate
-            propagation_model: Model for RF propagation
-            clutter_model: Optional model for environmental clutter
-            hpm_coupling_model: Optional model for HPM coupling effects
-            log_level: Logging level
-            data_recorder: Optional component for recording results
-            max_workers: Maximum number of worker threads/processes
         """
         self.logger = get_logger(__name__)
         self.logger.setLevel(log_level)
-        
-        self.scenario = scenario
+
+        # Models and components
         self.propagation_model = propagation_model
         self.clutter_model = clutter_model
-        self.hpm_coupling_model = hpm_coupling_model  # Store the HPM coupling model
+        self.hpm_coupling_model = hpm_coupling_model
         self.data_recorder = data_recorder
         self.max_workers = max_workers
-        
-        # Simulation state
-        self.current_time = scenario.start_time
-        self._event_queue = []
-        heapq.heapify(self._event_queue)
-        
+
+        # Thread pool for parallel processing
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
         # Performance tracking
         self.processing_times = {
             'propagation': [],
@@ -79,41 +70,64 @@ class OptimizedSimulationEngine:
             'signal_processing': [],
             'event_processing': []
         }
-        
+
         # Spatial acceleration structure (simple grid-based)
         self.spatial_grid = {}
         self.grid_cell_size = 100.0  # meters
-        
-        # Thread pool for parallel processing
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        
-        # Event types
+
+        # Event types (can be extended)
         self._EVENT_PLATFORM_UPDATE = "PLATFORM_UPDATE"
         self._EVENT_SIGNAL_PROPAGATION = "SIGNAL_PROPAGATION"
         self._EVENT_SIMULATION_END = "SIMULATION_END"
-        
-        # Initialize
-        self._initialize_spatial_grid()
-        self._schedule_initial_events()
-        
-        self.logger.info(f"Optimized Simulation Engine initialized with {max_workers} workers")
-    
-    def _initialize_spatial_grid(self):
-        """Initialize spatial acceleration grid."""
-        # Simple implementation - can be enhanced with octree or other spatial structures
+
+        self._running = False # Flag to indicate if simulation is running
+
+        # Call initialize to set up scenario-specific state
+        self.initialize(scenario)
+
+    # Implement the initialize method from ISimulationEngine
+    def initialize(self, scenario: Scenario) -> None:
+        """Initialize the simulation with a scenario."""
+        # Stop executor if it's running from a previous simulation
+        if hasattr(self, 'executor') and self.executor:
+             # Allow current tasks to complete before shutting down
+            self.executor.shutdown(wait=True)
+            self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+        self.scenario = scenario
+        self._current_time = scenario.start_time
+        self._event_queue = []
+        heapq.heapify(self._event_queue)
+        self._running = False # Reset running state
+
+        # Reset spatial grid and performance times
+        self.spatial_grid = {}
+        self.processing_times = { k: [] for k in self.processing_times }
+
+        # Initialize spatial grid with platform starting positions
         for platform_id, platform in self.scenario.platforms.items():
             cell = self._get_grid_cell(platform.position)
             if cell not in self.spatial_grid:
                 self.spatial_grid[cell] = set()
             self.spatial_grid[cell].add(platform_id)
-    
+
+        self._schedule_initial_events()
+        self.logger.info(f"Optimized Engine initialized for scenario '{scenario.name}'.")
+
+
+    # Implement the current_time property from ISimulationEngine
+    @property
+    def current_time(self) -> float:
+        """Get the current simulation time."""
+        return self._current_time
+
     def _get_grid_cell(self, position: Position) -> Tuple[int, int, int]:
-        """Get grid cell for a position."""
-        x_cell = int(position.x / self.grid_cell_size)
-        y_cell = int(position.y / self.grid_cell_size)
-        z_cell = int(position.z / self.grid_cell_size)
-        return (x_cell, y_cell, z_cell)
-    
+         """Calculate the grid cell coordinates for a given position."""
+         x_cell = int(position.x // self.grid_cell_size)
+         y_cell = int(position.y // self.grid_cell_size)
+         z_cell = int(position.z // self.grid_cell_size)
+         return (x_cell, y_cell, z_cell)
+
     def _update_platform_grid_position(self, platform_id: str, old_pos: Position, new_pos: Position):
         """Update platform position in spatial grid."""
         old_cell = self._get_grid_cell(old_pos)
@@ -174,71 +188,138 @@ class OptimizedSimulationEngine:
             self._EVENT_SIMULATION_END
         )
     
-    def schedule_event(self, time: float, event_type: str, data: Any = None, 
+    # Align schedule_event signature with ISimulationEngine
+    def schedule_event(self, time: float, event_type: str, data: Any = None,
                       callback: Optional[EventCallback] = None, priority: int = 0):
         """Schedule an event to occur at a specific time."""
+        if time < self._current_time:
+            self.logger.warning(f"Attempted to schedule event at time {time} which is before current time {self._current_time}. Skipping.")
+            return
         event = Event(time=time, priority=priority, type=event_type, data=data, callback=callback)
         heapq.heappush(self._event_queue, event)
     
-    # Update the run method to include HPM effect updates
-    def run(self, duration: Optional[float] = None):
+    # Align run signature with ISimulationEngine
+    def run(self, duration: Optional[float] = None) -> None: # Return type is None as per interface
         """Run the simulation for specified duration."""
+        if self._running:
+            self.logger.warning("Simulation is already running.")
+            return
+
         if duration is None:
+            # Calculate end_time based on scenario duration if not provided
             end_time = self.scenario.start_time + self.scenario.duration
         else:
-            end_time = self.current_time + duration
-        
-        self.logger.info(f"Starting simulation run from t={self.current_time:.6f}s to t={end_time:.6f}s")
-        
+            end_time = self._current_time + duration
+
+        self.logger.info(f"Starting simulation run from t={self._current_time:.6f}s to t={end_time:.6f}s")
+
+        self._running = True
         start_wall_time = time.time()
         event_count = 0
-        
+
         try:
+            # Main simulation loop
             while self._event_queue and self._event_queue[0].time <= end_time:
-                # Process next event
+                # Get the next event
                 event = heapq.heappop(self._event_queue)
-                
-                # Update simulation time
-                self.current_time = event.time
-                
-                # Update HPM effects
+
+                # Advance time to the event time
+                self._current_time = event.time
+
+                # Update HPM effects (if model exists)
                 if self.hpm_coupling_model:
-                    self.hpm_coupling_model.update_effects(self.current_time, self.scenario.platforms)
-                
-                # Process event
+                    self.hpm_coupling_model.update_effects(self._current_time, self.scenario.platforms)
+
+                # Process the event
                 event_start = time.time()
                 self._process_event(event)
                 event_duration = time.time() - event_start
-                
+
+                # Record processing time
                 self.processing_times['event_processing'].append(event_duration)
                 event_count += 1
-                
-                # Periodically log progress
-                if event_count % 10000 == 0:
+
+                # Periodically log progress (example: every 1000 events)
+                if event_count % 1000 == 0:
                     elapsed = time.time() - start_wall_time
                     self.logger.info(f"Processed {event_count} events, "
-                                    f"sim time: {self.current_time:.6f}s, "
-                                    f"wall time: {elapsed:.3f}s")
-        
+                                     f"sim time: {self._current_time:.6f}s, "
+                                     f"wall time: {elapsed:.3f}s")
+
+            # Check if simulation ended because the queue became empty before end_time
+            if not self._event_queue and self._current_time < end_time:
+                 self.logger.info(f"Simulation ended early at t={self._current_time:.6f}s due to empty event queue.")
+                 self._current_time = end_time # Advance time to the requested end time
+
+            # Ensure simulation time reaches the intended end_time if duration was specified
+            elif self._current_time < end_time:
+                  self._current_time = end_time
+
         except Exception as e:
-            self.logger.error(f"Error during simulation: {e}")
+            self.logger.error(f"Error during simulation run: {e}", exc_info=True)
+            # Optionally re-raise or handle specific exceptions
             raise
-        
         finally:
-            # Log performance statistics
-            total_time = time.time() - start_wall_time
-            self.logger.info(f"Simulation completed: processed {event_count} events in {total_time:.3f}s")
-            
-            if event_count > 0:
-                avg_event_time = np.mean(self.processing_times['event_processing']) * 1000
-                self.logger.info(f"Average event processing time: {avg_event_time:.3f}ms")
-                
-                if self.processing_times['propagation']:
-                    avg_prop_time = np.mean(self.processing_times['propagation']) * 1000
-                    self.logger.info(f"Average propagation calculation time: {avg_prop_time:.3f}ms")
-    
+            self._running = False
+            # Shutdown the executor cleanly
+            self.executor.shutdown(wait=True)
+            # Recreate executor for potential future runs or steps
+            self.executor = ThreadPoolExecutor(max_workers=self.max_workers)
+
+            # Log final performance statistics
+            total_wall_time = time.time() - start_wall_time
+            self.logger.info(f"Simulation run finished at t={self._current_time:.6f}s. Processed {event_count} events in {total_wall_time:.3f}s wall time.")
+            self._log_performance_summary()
+
+
+    def _log_performance_summary(self):
+        """Log summary statistics of processing times."""
+        # ... Implementation to calculate and log avg/max/min times ...
+        pass
+
+    # Implement the step method from ISimulationEngine
+    def step(self, time_step: float) -> None:
+        """Advance the simulation by a single time step."""
+        if self._running:
+            self.logger.warning("Cannot step while simulation is running via run().")
+            return
+        if time_step <= 0:
+            self.logger.warning("Time step must be positive.")
+            return
+
+        end_time = self._current_time + time_step
+        self.logger.debug(f"Stepping simulation from t={self._current_time:.6f}s to t={end_time:.6f}s")
+
+        event_count = 0
+        step_start_wall = time.time()
+        try:
+             self._running = True
+             while self._event_queue and self._event_queue[0].time <= end_time:
+                event = heapq.heappop(self._event_queue)
+                self._current_time = event.time # Advance time to event
+
+                 # Update HPM effects
+                if self.hpm_coupling_model:
+                    self.hpm_coupling_model.update_effects(self._current_time, self.scenario.platforms)
+
+                self._process_event(event)
+                event_count += 1
+
+             # Advance time to the end of the step if no more events occurred within the step
+             self._current_time = end_time
+
+        except Exception as e:
+             self.logger.error(f"Error during simulation step: {e}", exc_info=True)
+             raise # Re-raise after logging
+        finally:
+            step_wall_time = time.time() - step_start_wall
+            self.logger.debug(f"Step completed. Processed {event_count} events in {step_wall_time:.6f}s wall time.")
+            self._running = False
+
+
     def _process_event(self, event: Event):
-        """Process a simulation event."""
+        """Process a single simulation event."""
+        self.logger.debug(f"Processing event: {event.type} at time {event.time}")
         if event.type == self._EVENT_PLATFORM_UPDATE:
             if isinstance(event.data, str):
                 self._handle_platform_update(event.data)
@@ -386,3 +467,9 @@ class OptimizedSimulationEngine:
         
         # Record processing time
         self.processing_times['signal_processing'].append(time.time() - start_time)
+
+    def __del__(self):
+        """Ensure executor is shut down when the engine is deleted."""
+        if hasattr(self, 'executor') and self.executor:
+            # Don't wait indefinitely here, as __del__ can block garbage collection
+            self.executor.shutdown(wait=False)

@@ -6,6 +6,7 @@ import logging
 import json
 import os
 import requests
+import time 
 # Import 'field' from dataclasses
 from dataclasses import dataclass, field
 import random # Import random for exploration
@@ -164,32 +165,51 @@ class MLIntegration:
                     features: Dict[str, Any],
                     env_state: EnvironmentState,
                     waveform: CognitiveWaveform) -> Dict[str, Any]:
-        """Placeholder for Reinforcement Learning based prediction."""
-        logger.info(f"Predicting adaptation using RL model: {config}")
-
-        # --- State Representation (Highly Simplified) ---
-        # In a real system, state needs to discretize or embed features effectively.
-        # Example: Combine current frequency band status and goal.
-        current_freq_band = env_state.get_band_occupancy(waveform.center_frequency)
+        """Reinforcement Learning based prediction."""
+        logger.info(f"Predicting adaptation using RL model: {config.model_path}")
+    
+        # --- State Representation ---
+        # Get current frequency band status
+        current_freq_band = None
+        for band_id, occupancy in env_state.spectrum_occupancy.items():
+            if (occupancy.band.start_freq <= waveform.center_frequency <= 
+                occupancy.band.end_freq):
+                current_freq_band = occupancy
+                break
+        
         jamming_status = "jammed" if current_freq_band and current_freq_band.is_occupied else "clear"
-        # Simplistic state: just jamming status (needs more context)
-        state_key = f"jamming_{jamming_status}"
-
-        # --- Action Space (Highly Simplified) ---
-        # Define possible actions (parameter changes).
-        # Example: Change frequency up/down, change power up/down.
+        snr_level = "low" if current_freq_band and current_freq_band.snr < 10 else "high"
+        
+        # Fix: Use the enum name instead of trying to access goal_type
+        goal_name = waveform.adaptation_goals[0].name if waveform.adaptation_goals else 'none'
+        
+        # More comprehensive state representation
+        state_key = f"jamming_{jamming_status}_snr_{snr_level}_goal_{goal_name}"
+    
+        # --- Action Space ---
+        # Define possible actions with constraints
         possible_actions = {
-            "freq_up": {"center_frequency": waveform.center_frequency + waveform.bandwidth},
-            "freq_down": {"center_frequency": waveform.center_frequency - waveform.bandwidth},
-            "power_up": {"amplitude": min(waveform.amplitude * 1.2, waveform.adaptation_constraints.get('max_amplitude', 1.0))},
+            "freq_up": {"center_frequency": min(waveform.center_frequency + waveform.bandwidth, 
+                                            waveform.adaptation_constraints.get('max_frequency', 6e9))},
+            "freq_down": {"center_frequency": max(waveform.center_frequency - waveform.bandwidth, 
+                                            waveform.adaptation_constraints.get('min_frequency', 30e6))},
+            "power_up": {"amplitude": min(waveform.amplitude * 1.2, 
+                                        waveform.adaptation_constraints.get('max_amplitude', 1.0))},
+            "power_down": {"amplitude": max(waveform.amplitude * 0.8, 
+                                        waveform.adaptation_constraints.get('min_amplitude', 0.1))},
+            "bandwidth_up": {"bandwidth": min(waveform.bandwidth * 1.2, 
+                                        waveform.adaptation_constraints.get('max_bandwidth', 20e6))},
+            "bandwidth_down": {"bandwidth": max(waveform.bandwidth * 0.8, 
+                                            waveform.adaptation_constraints.get('min_bandwidth', 1e6))},
             "no_change": {}
         }
+        
         action_keys = list(possible_actions.keys())
-
+    
         # Initialize Q-values for state if not seen
         if state_key not in self.q_values:
             self.q_values[state_key] = {action: 0.0 for action in action_keys}
-
+    
         # --- Epsilon-Greedy Action Selection ---
         if random.random() < self.rl_exploration_rate:
             # Explore: Choose a random action
@@ -200,16 +220,16 @@ class MLIntegration:
             q_s = self.q_values[state_key]
             action_key = max(q_s.keys(), key=lambda k: q_s[k])
             logger.debug(f"RL Exploit: Chose best action '{action_key}' with value {q_s[action_key]:.2f}")
-
+    
         chosen_action_params = possible_actions[action_key]
-
+    
         # Store chosen action for learning update
         # We need a way to link this prediction to the subsequent reward
         self._last_rl_prediction = {
             "state": state_key,
             "action": action_key
         }
-
+    
         # Return the parameter changes for the chosen action
         return chosen_action_params
 
@@ -219,38 +239,49 @@ class MLIntegration:
                                adaptations: Dict[str, Any],
                                performance_metrics: Dict[str, float]) -> None:
         """
-        Record adaptation results for future training (including RL updates).
+        Record adaptation results for future training and RL updates.
         """
+        # Validate inputs
+        if not isinstance(performance_metrics, dict):
+            logger.error(f"Invalid performance metrics: {performance_metrics}")
+            return
+            
+        # Create record with proper timestamp
         record = {
             "features": features,
             "adaptations": adaptations,
             "performance": performance_metrics,
-            "timestamp": features.get("timestamp", 0.0)
+            "timestamp": features.get("timestamp", time.time())
         }
-
+    
         # --- Update RL Q-values ---
         if hasattr(self, '_last_rl_prediction') and self._last_rl_prediction:
             state = self._last_rl_prediction["state"]
             action = self._last_rl_prediction["action"]
-
-            # Define reward based on performance (Highly Simplified)
-            # Example: Positive reward for high SNR, negative for low SNR/high interference
-            reward = performance_metrics.get('snr', 0.0) - performance_metrics.get('interference_db', 0.0) / 10.0 # Example reward
-
-            # Q-learning update rule (simplified, no next state Q value needed here)
-            old_value = self.q_values.get(state, {}).get(action, 0.0)
-            new_value = old_value + self.rl_learning_rate * (reward - old_value) # Simplified update
-
-            if state not in self.q_values:
-                 self.q_values[state] = {}
-            self.q_values[state][action] = new_value
-
-            logger.debug(f"RL Update: State='{state}', Action='{action}', Reward={reward:.2f}, Old Q={old_value:.2f}, New Q={new_value:.2f}")
-
-            # Clear last prediction to avoid reusing it
+    
+            # Calculate reward based on multiple performance metrics
+            reward = 0.0
+            if 'snr' in performance_metrics:
+                reward += performance_metrics['snr'] * 0.5  # Weight SNR heavily
+            if 'throughput' in performance_metrics:
+                reward += performance_metrics['throughput'] * 0.3  # Weight throughput
+            if 'interference_db' in performance_metrics:
+                reward -= performance_metrics['interference_db'] * 0.2  # Penalize interference
+                
+            # Apply Q-learning update with proper discount factor
+            if state in self.q_values and action in self.q_values[state]:
+                old_value = self.q_values[state][action]
+                # Full Q-learning update with discount factor
+                # We don't have next state here, so simplify
+                new_value = old_value + self.rl_learning_rate * (reward - old_value)
+                self.q_values[state][action] = new_value
+                
+                logger.debug(f"RL Update: State='{state}', Action='{action}', Reward={reward:.2f}, Q={new_value:.2f}")
+    
+            # Clear last prediction
             self._last_rl_prediction = None
-
-        # Log/Store feature history
+    
+        # Store feature history with size limit
         self.feature_history.append(record)
         if len(self.feature_history) > self.max_history_size:
             self.feature_history = self.feature_history[-self.max_history_size:]
