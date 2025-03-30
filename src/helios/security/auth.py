@@ -8,10 +8,18 @@ import hashlib
 import secrets
 import base64
 from typing import Dict, List, Optional, Any, Tuple, Union
-from enum import Enum, auto
+from enum import Enum, auto, IntEnum # Added IntEnum
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+# --- Added ClassificationLevel Enum ---
+class ClassificationLevel(IntEnum):
+    """Security classification levels."""
+    UNCLASSIFIED = 0
+    CONFIDENTIAL = 1
+    SECRET = 2
+    TOP_SECRET = 3
 
 class UserRole(Enum):
     """User roles for access control."""
@@ -80,6 +88,14 @@ class AuthManager:
             UserRole.VIEWER: {
                 resource_type: ["read"] for resource_type in ResourceType
             }
+        }
+        
+        # Add clearance levels to roles
+        self.role_clearance: Dict[UserRole, ClassificationLevel] = {
+            UserRole.ADMIN: ClassificationLevel.TOP_SECRET,
+            UserRole.OPERATOR: ClassificationLevel.SECRET,
+            UserRole.ANALYST: ClassificationLevel.CONFIDENTIAL,
+            UserRole.VIEWER: ClassificationLevel.UNCLASSIFIED,
         }
         
         # Load users from config if provided
@@ -386,4 +402,40 @@ class AuthManager:
         user.password_hash = self._hash_password(new_password, user.salt)
         
         logger.info(f"Password changed for user {username}")
+        return True
+    
+    # --- Added check_permission_with_classification ---
+    def check_permission_with_classification(
+        self,
+        token: str,
+        resource_type: ResourceType,
+        permission: str,
+        resource_classification: ClassificationLevel
+    ) -> bool:
+        """Check permission AND classification clearance."""
+        # 1. Standard Permission Check
+        if not self.check_permission(token, resource_type, permission):
+            # Logging is handled within check_permission
+            return False
+    
+        # 2. Classification Clearance Check
+        username = self.sessions.get(token)
+        # Explicitly check if username is None, even if unlikely due to prior check
+        if username is None:
+            logger.error(f"Consistency error: Token '{token[:8]}...' validated but username not found in sessions.")
+            return False # Should not happen if check_permission worked
+    
+        user = self.users.get(username)
+        # Explicitly check if user is None
+        if user is None:
+            logger.error(f"Consistency error: Username '{username}' found in sessions but not in users dictionary.")
+            return False # Should not happen
+    
+        user_clearance = self.role_clearance.get(user.role, ClassificationLevel.UNCLASSIFIED)
+    
+        if user_clearance < resource_classification:
+            logger.warning(f"User '{username}' (Clearance: {user_clearance.name}) denied access to resource (Classification: {resource_classification.name}).")
+            return False
+    
+        logger.debug(f"User '{username}' granted '{permission}' permission on '{resource_type.name}' resource at '{resource_classification.name}' level.")
         return True

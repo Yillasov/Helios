@@ -1,8 +1,10 @@
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, List, Optional, Tuple, Union, Any # Added Any here
+from typing import Dict, List, Optional, Tuple, Union, Any, Callable # Removed duplicate Optional, List, Tuple, Union
 import numpy as np
+
+from helios.ecm.techniques import ECMParameters # <<< Add this import
 
 # --- Enumerations ---
 
@@ -72,10 +74,34 @@ class Waveform:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     center_frequency: float = 0.0  # Hz
     bandwidth: float = 0.0  # Hz
-    amplitude: float = 1.0 # Volts or related unit
-    modulation_type: ModulationType = ModulationType.NONE
-    modulation_params: Dict = field(default_factory=dict)
-    duration: Optional[float] = None  # seconds, None for continuous
+    amplitude: float = 1.0  # V or relevant unit
+    duration: Optional[float] = None # Duration in seconds
+    modulation_type: str = "CW" # e.g., CW, AM, FM, PSK, QAM
+    modulation_params: Dict[str, Any] = field(default_factory=dict)
+    ecm_params: Optional[ECMParameters] = None # This line now has a valid type hint
+
+    @property
+    def end_time(self) -> Optional[float]:
+        # Placeholder for waveform end time calculation if needed
+        return None
+
+    def sample(self, t: Union[float, np.ndarray]) -> Union[complex, np.ndarray]:
+        """Sample the waveform at time t. Placeholder."""
+        # Basic CW signal
+        phase = 2 * np.pi * self.center_frequency * t
+        return self.amplitude * np.exp(1j * phase)
+
+    def get_power_spectral_density(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Calculate power spectral density. Placeholder."""
+        # Simplified: box shape centered at center_frequency
+        if self.bandwidth > 0:
+            freqs = np.linspace(self.center_frequency - self.bandwidth / 2,
+                                self.center_frequency + self.bandwidth / 2, 100)
+            psd = (self.amplitude ** 2 / self.bandwidth) * np.ones_like(freqs) # Simplified power density
+        else:
+            freqs = np.array([self.center_frequency])
+            psd = np.array([self.amplitude ** 2]) # Simplified total power for CW
+        return freqs, psd
 
     def generate_samples(self, sampling_rate: float, duration: float) -> np.ndarray:
         """Generate time-domain samples of the waveform.
